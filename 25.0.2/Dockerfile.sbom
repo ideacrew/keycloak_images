@@ -1,0 +1,61 @@
+FROM registry.access.redhat.com/ubi9 AS ubi-micro-build
+
+ENV KEYCLOAK_VERSION 25.0.2
+ARG KEYCLOAK_DIST=https://github.com/keycloak/keycloak/releases/download/$KEYCLOAK_VERSION/keycloak-$KEYCLOAK_VERSION.tar.gz
+
+RUN dnf install -y tar gzip
+
+ADD $KEYCLOAK_DIST /tmp/keycloak/
+
+# The next step makes it uniform for local development and upstream built.
+# If it is a local tar archive then it is unpacked, if from remote is just downloaded.
+RUN (cd /tmp/keycloak && \
+    tar -xvf /tmp/keycloak/keycloak-*.tar.gz && \
+    rm /tmp/keycloak/keycloak-*.tar.gz) || true
+
+RUN mv /tmp/keycloak/keycloak-* /opt/keycloak && mkdir -p /opt/keycloak/data
+RUN chmod -R g+rwX /opt/keycloak
+
+ADD ubi-null.sh /tmp/
+RUN bash /tmp/ubi-null.sh java-21-openjdk-headless glibc-langpack-en findutils
+
+RUN yum rq --installroot /tmp/null/rootfs --installed --queryformat %{name}\\t%{epoch}:%{version}-%{release}\\t%{arch} > /tmp/packages_for_sbom
+
+FROM ruby:3.3-bookworm
+ARG KEYCLOAK_RELEASE_SBOM_DIST=https://github.com/ideacrew/keycloak-release-sbom/releases/download/0.1.0/keycloak-release-sbom-0.1.0.jar
+ARG REDHAT_OVAL_XML_SOURCE=https://www.redhat.com/security/data/oval/v2/RHEL9/rhel-9-including-unpatched.oval.xml.bz2
+
+RUN apt-get update && apt-get -y install default-jre
+
+RUN mkdir /sbom_generation
+RUN mkdir /sbom_generation/keycloak
+RUN mkdir /sbom_generation/keycloak-release-sbom
+RUN mkdir /sbom_generation/rhel_oval
+
+ADD $KEYCLOAK_RELEASE_SBOM_DIST /sbom_generation/keycloak-release-sbom/
+ADD $REDHAT_OVAL_XML_SOURCE /sbom_generation/rhel_oval/
+
+RUN mkdir /sbom_generation/cyclonedx && \
+    cd /sbom_generation/cyclonedx && \
+    curl -OL https://github.com/CycloneDX/cyclonedx-cli/releases/download/v0.25.1/cyclonedx-linux-x64 && \
+    mv cyclonedx-linux-x64 /usr/local/bin/cyclonedx && \
+    chmod u+x /usr/local/bin/cyclonedx
+RUN curl -OL https://github.com/google/osv-scanner/releases/download/v1.8.1/osv-scanner_linux_amd64 && \
+    mv osv-scanner_linux_amd64 /usr/local/bin/osv-scanner && \
+    chmod u+x,g+x,o+x /usr/local/bin/osv-scanner
+
+WORKDIR /sbom_generation
+
+COPY --from=ubi-micro-build /tmp/packages_for_sbom /sbom_generation/sbom/manifest/packages_for_sbom
+COPY --from=ubi-micro-build /opt/keycloak /sbom_generation/keycloak
+
+RUN cd /sbom_generation && git clone https://github.com/ideacrew/sbom_on_rails.git
+RUN cd /sbom_generation/sbom_on_rails && bundle install
+
+COPY sbom ./sbom
+
+RUN cd /sbom_generation/sbom/manifest && bunzip2 /sbom_generation/rhel_oval/rhel-9-including-unpatched.oval.xml.bz2 && \
+    mv /sbom_generation/rhel_oval/rhel-9-including-unpatched.oval.xml ./
+
+RUN cd /sbom_generation/keycloak-release-sbom && java -jar keycloak-release-sbom-0.1.0.jar 25.0.2 /sbom_generation/keycloak > /sbom_generation/sbom/manifest/keycloak_jars.json 
+RUN cd /sbom_generation/sbom_on_rails && bundle exec ruby /sbom_generation/sbom/manifest/sbom.rb > /sbom_generation/sbom/sbom.json

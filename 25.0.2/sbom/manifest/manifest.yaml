@@ -1,0 +1,9 @@
+items:
+  - type: custom_sbom
+    sbom_file: ./keycloak_jars.json
+  - type: yum_package_list
+    package_list_file: ./packages_for_sbom
+enrichers:
+  - type: rhel_oval_xml
+    xml_file: ./rhel-9-including-unpatched.oval.xml
+  - type: osv_scanner
