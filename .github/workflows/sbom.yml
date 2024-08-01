@@ -1,0 +1,43 @@
+name: SBOM
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'trunk'
+  pull_request:
+    branches:
+      - 'trunk'
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sbom:
+    strategy:
+      matrix:
+        version: ['25.0.2']
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build Image
+        env:
+          IMAGE_NAME: sbom-image-${{ github.run_id }}-${{ github.run_number }}-${{ matrix.version }}
+        run: |
+          cd ${{ matrix.version }}
+          docker build -t ${IMAGE_NAME} -f Dockerfile.sbom .
+      - name: Extract SBOM
+        env:
+          IMAGE_NAME: sbom-image-${{ github.run_id }}-${{ github.run_number }}-${{ matrix.version }}
+          CONTAINER_NAME: sbom-container-${{ github.run_id }}-${{ github.run_number }}-${{ matrix.version }}
+        run: |
+          docker container create --name ${CONTAINER_NAME} ${IMAGE_NAME}
+          docker container cp ${CONTAINER_NAME}:/sbom_generation/sbom/sbom.json ./sbom.json
+          docker container rm -f ${CONTAINER_NAME}
+          zip -er -P ${{ secrets.SBOM_PASSWORD }} sbom.zip sbom.json
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: SBOM ${{ matrix.version }}
+          path: sbom.zip
