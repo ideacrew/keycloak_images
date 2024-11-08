@@ -22,7 +22,7 @@ RUN bash /tmp/ubi-null.sh java-21-openjdk-headless glibc-langpack-en findutils
 RUN yum rq --installroot /tmp/null/rootfs --installed --queryformat %{name}\\t%{epoch}:%{version}-%{release}\\t%{arch} > /tmp/packages_for_sbom
 
 FROM ruby:3.3-bookworm
-ARG KEYCLOAK_RELEASE_SBOM_DIST=https://github.com/ideacrew/keycloak-release-sbom/releases/download/0.1.0/keycloak-release-sbom-0.1.0.jar
+ARG KEYCLOAK_RELEASE_SBOM_DIST=https://github.com/ideacrew/keycloak-release-sbom/releases/download/0.2.0/keycloak-release-sbom-0.2.0.jar
 ARG REDHAT_OVAL_XML_SOURCE=https://www.redhat.com/security/data/oval/v2/RHEL9/rhel-9-including-unpatched.oval.xml.bz2
 
 RUN apt-get update && apt-get -y install default-jre
