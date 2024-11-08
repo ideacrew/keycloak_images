@@ -57,5 +57,5 @@ COPY sbom ./sbom
 RUN cd /sbom_generation/sbom/manifest && bunzip2 /sbom_generation/rhel_oval/rhel-9-including-unpatched.oval.xml.bz2 && \
     mv /sbom_generation/rhel_oval/rhel-9-including-unpatched.oval.xml ./
 
-RUN cd /sbom_generation/keycloak-release-sbom && java -jar keycloak-release-sbom-0.1.0.jar 25.0.2 /sbom_generation/keycloak > /sbom_generation/sbom/manifest/keycloak_jars.json 
+RUN cd /sbom_generation/keycloak-release-sbom && java -jar keycloak-release-sbom-0.2.0.jar 25.0.2 /sbom_generation/keycloak > /sbom_generation/sbom/manifest/keycloak_jars.json 
 RUN cd /sbom_generation/sbom_on_rails && bundle exec ruby /sbom_generation/sbom/manifest/sbom.rb > /sbom_generation/sbom/sbom.json
